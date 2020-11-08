@@ -1,101 +1,125 @@
 #include "mainwindow.h"
 
 MainWindow::MainWindow(QWidget* parent)
-	: QMainWindow(parent)
-	, scene(new QGraphicsScene(this))
-    , view(new QGraphicsView())
+   : QMainWindow(parent)
+   , scene(new QGraphicsScene(this))
+   , view(new QGraphicsView())
 {
-	initMainWindow();
-	createActions();
-	createMenus();
-
-	setCentralWidget(view);
-
-	view->setScene(scene);
-    scene->installEventFilter(this);
-    
-	statusBar()->showMessage(tr("Ready"));
+   InitMainWindow();
+   CreateActions();
+   CreateMenus();
+   
+   setCentralWidget(view);
+   
+   view->setScene(scene);
+   scene->installEventFilter(this);
+   CreateToolbars();
+   statusBar()->showMessage(tr("Ready"));
 }
 
 MainWindow::~MainWindow()
 {
 }
 
-QImage MainWindow::Threshold(const int& thresh, const QImage& input)
+void MainWindow::OpenFile()
 {
-	QImage returnImg = input;
-
-	for (int x = 0; x < input.height(); ++x)
-	{
-		for (int y = 0; y < input.width(); ++y)
-		{
-			returnImg.setPixel(x, y, qGray(input.pixel(x, y)) > thresh ? 1 : 0);
-		}
-	}
-
-	return returnImg;
+   QFileDialog dialog;
+   initializeImageFileDialog(dialog, QFileDialog::AcceptOpen);
+   auto filePath = dialog.getOpenFileName();
+   
+   img = QImage(filePath);
+   setWindowTitle(filePath);
+   
+   if (p == nullptr)
+   {
+      p = scene->addPixmap(QPixmap::fromImage(img));
+   }
+   else
+   {
+      p->setPixmap(QPixmap::fromImage(img));
+   }
+   
+   view->fitInView(p, Qt::KeepAspectRatio);
 }
 
-void MainWindow::openFile()
+void MainWindow::CreateActions()
 {
-	QFileDialog dialog;
-	initializeImageFileDialog(dialog, QFileDialog::AcceptOpen);
-    auto filePath = dialog.getOpenFileName();
-//    img = Threshold(150,QImage(filePath));
-    img = QImage(filePath);
-    setWindowTitle(filePath);
-
-	QGraphicsPixmapItem* p = scene->addPixmap(QPixmap::fromImage(img));
-	view->fitInView(p, Qt::KeepAspectRatio);
+   openAct = new QAction(tr("&Open"), this);
+   openAct->setShortcuts(QKeySequence::Open);
+   openAct->setStatusTip(tr("Open a sperm cell picture"));
+   connect(openAct, &QAction::triggered, this, &MainWindow::OpenFile);
 }
 
-void MainWindow::createActions()
+void MainWindow::CreateMenus()
 {
-	openAct = new QAction(tr("&Open"), this);
-	openAct->setShortcuts(QKeySequence::Open);
-	openAct->setStatusTip(tr("Open a sperm cell picture"));
-	connect(openAct, &QAction::triggered, this, &MainWindow::openFile);
+   fileMenu = menuBar()->addMenu(tr("&File"));
+   fileMenu->addAction(openAct);
 }
 
-void MainWindow::createMenus()
+void MainWindow::CreateToolbars()
 {
-	fileMenu = menuBar()->addMenu(tr("&File"));
-	fileMenu->addAction(openAct);
+   QToolBar* toolbar = addToolBar(tr("Threshold"));
+   
+   threshSlider->setMaximum(MAX_THRESH_VAL);
+   threshSlider->setMinimum(MIN_THRESH_VAL);
+   
+   connect(threshSlider, &QSlider::valueChanged, this, &MainWindow::HandleThresholdSliderChanged);
+   
+   toolbar->addWidget(threshSlider);
 }
 
-void MainWindow::initMainWindow()
+void MainWindow::HandleThresholdSliderChanged(int value)
 {
-	QScreen* screen = QGuiApplication::primaryScreen();
-	QRect screenGeometry = screen->geometry();
-	resize(QSize(screenGeometry.width() / 3, screenGeometry.height() / 2));
+   WorkerThread *workerThread = new WorkerThread();
+   workerThread->img = img;
+   workerThread->threshVal = value;
+   
+   connect(workerThread, &WorkerThread::resultReady, this, &MainWindow::HandleThresholdFinished);
+   connect(workerThread, &WorkerThread::finished, workerThread, &QObject::deleteLater);
+   workerThread->start();
+}
+
+void MainWindow::HandleThresholdFinished(QImage val)
+{
+   p->setPixmap(QPixmap::fromImage(val));
+}
+
+void MainWindow::InitMainWindow()
+{
+   QScreen* screen = QGuiApplication::primaryScreen();
+   QRect screenGeometry = screen->geometry();
+   resize(QSize(screenGeometry.width() / 3, screenGeometry.height() / 2));
+}
+
+void MainWindow::HandleClickEvent(QEvent *event)
+{
+   QGraphicsSceneMouseEvent* n = (QGraphicsSceneMouseEvent*)event;
+
+   QString stat = "";
+   
+   if (img.valid(n->scenePos().toPoint()))
+   {
+      stat = "Clicked: {"
+      + QString::number(n->scenePos().toPoint().x())
+      + " , "
+      + QString::number(n->scenePos().toPoint().y())
+      + "} Value: "
+      + QString::number(qGray(img.pixel(n->scenePos().toPoint())));
+   }
+   else
+   {
+      stat = "Outside boundary";
+   }
+   
+   statusBar()->showMessage(stat);
 }
 
 bool MainWindow::eventFilter(QObject* target, QEvent* event)
 {
-    if (target == scene)
-    {
-        if (event->type() == QEvent::GraphicsSceneMousePress)
-        {
-            QGraphicsSceneMouseEvent* n = new QGraphicsSceneMouseEvent();
-            n = (QGraphicsSceneMouseEvent*)event;
-            QString stat = "";
-            
-            if (img.valid(n->scenePos().toPoint()))
-            {
-                stat = "Clicked: {"
-                + QString::number(n->scenePos().toPoint().x())
-                + " , "
-                + QString::number(n->scenePos().toPoint().y())
-                + "} Value: "
-                + QString::number(qGray(img.pixel(n->scenePos().toPoint())));
-            }
-            else
-            {
-                stat = "Outside boundary";
-            }
-            
-            statusBar()->showMessage(stat);
-        }
-    }
-    return QMainWindow::eventFilter(target, event);
+   if (target == scene && event->type() == QEvent::GraphicsSceneMousePress)
+   {
+      HandleClickEvent(event);
+   }
+   
+   return QMainWindow::eventFilter(target, event);
 }

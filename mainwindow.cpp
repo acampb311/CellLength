@@ -2,8 +2,8 @@
 
 MainWindow::MainWindow(QWidget* parent)
 	: QMainWindow(parent)
-	, view(new QGraphicsView())
 	, scene(new QGraphicsScene(this))
+    , view(new QGraphicsView())
 {
 	initMainWindow();
 	createActions();
@@ -12,7 +12,8 @@ MainWindow::MainWindow(QWidget* parent)
 	setCentralWidget(view);
 
 	view->setScene(scene);
-
+    scene->installEventFilter(this);
+    
 	statusBar()->showMessage(tr("Ready"));
 }
 
@@ -39,8 +40,10 @@ void MainWindow::openFile()
 {
 	QFileDialog dialog;
 	initializeImageFileDialog(dialog, QFileDialog::AcceptOpen);
-
-	QImage img = QImage(dialog.getOpenFileName());
+    auto filePath = dialog.getOpenFileName();
+//    img = Threshold(150,QImage(filePath));
+    img = QImage(filePath);
+    setWindowTitle(filePath);
 
 	QGraphicsPixmapItem* p = scene->addPixmap(QPixmap::fromImage(img));
 	view->fitInView(p, Qt::KeepAspectRatio);
@@ -67,5 +70,32 @@ void MainWindow::initMainWindow()
 	resize(QSize(screenGeometry.width() / 3, screenGeometry.height() / 2));
 }
 
-
-
+bool MainWindow::eventFilter(QObject* target, QEvent* event)
+{
+    if (target == scene)
+    {
+        if (event->type() == QEvent::GraphicsSceneMousePress)
+        {
+            QGraphicsSceneMouseEvent* n = new QGraphicsSceneMouseEvent();
+            n = (QGraphicsSceneMouseEvent*)event;
+            QString stat = "";
+            
+            if (img.valid(n->scenePos().toPoint()))
+            {
+                stat = "Clicked: {"
+                + QString::number(n->scenePos().toPoint().x())
+                + " , "
+                + QString::number(n->scenePos().toPoint().y())
+                + "} Value: "
+                + QString::number(qGray(img.pixel(n->scenePos().toPoint())));
+            }
+            else
+            {
+                stat = "Outside boundary";
+            }
+            
+            statusBar()->showMessage(stat);
+        }
+    }
+    return QMainWindow::eventFilter(target, event);
+}

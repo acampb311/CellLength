@@ -16,6 +16,7 @@
 #include <QStatusBar>
 #include <QMenuBar>
 #include <QAction>
+#include <QGraphicsSceneMouseEvent>
 
 class MainWindow : public QMainWindow
 {
@@ -32,12 +33,14 @@ public:
 
 private slots:
 	void openFile();
+    bool eventFilter(QObject *target, QEvent *event);
 
 private:
 	QMenu* fileMenu;
 	QAction* openAct;
 	QGraphicsScene* scene;
 	QGraphicsView* view;
+    QImage img;
 };
 
 // https://doc.qt.io/qt-5/qtwidgets-widgets-imageviewer-example.html

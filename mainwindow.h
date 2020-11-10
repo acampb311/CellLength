@@ -1,30 +1,28 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QMainWindow>
+#include <QAction>
 #include <QApplication>
-#include <QScreen>
-#include <QRect>
 #include <QFileDialog>
-#include <QStandardPaths>
+#include <QGraphicsPixmapItem>
+#include <QGraphicsSceneMouseEvent>
+#include <QGraphicsView>
+#include <QHBoxLayout>
 #include <QImageReader>
 #include <QImageWriter>
-#include <QImage>
-#include <QGraphicsView>
-#include <QPixmap>
-#include <QGraphicsPixmapItem>
-#include <QStatusBar>
-#include <QMenuBar>
-#include <QAction>
-#include <QGraphicsSceneMouseEvent>
-
 #include <QLabel>
+#include <QMainWindow>
+#include <QMenuBar>
+#include <QPixmap>
 #include <QPushButton>
-#include <QHBoxLayout>
-#include <QToolBar>
+#include <QRect>
+#include <QScreen>
 #include <QSlider>
-#include <QThread>
+#include <QStandardPaths>
+#include <QStatusBar>
 #include <QString>
+#include <QToolBar>
+#include <QThread>
 
 class WorkerThread;
 
@@ -44,14 +42,14 @@ public:
    void InitMainWindow();
    void CreateToolbars();
    
-private slots:
+   private slots:
    void OpenFile();
    void HandleClickEvent(QEvent *event);
    void HandleThresholdSliderChanged(int value);
    void HandleThresholdFinished(QImage val);
    
    bool eventFilter(QObject *target, QEvent *event);
-
+   
    
 private:
    QMenu* fileMenu;
@@ -59,7 +57,7 @@ private:
    QGraphicsScene* scene;
    QGraphicsView* view;
    QImage img;
-   QSlider* threshSlider = new QSlider(Qt::Horizontal);
+   
    QGraphicsPixmapItem* p = nullptr;
 };
 
@@ -74,11 +72,13 @@ public:
       
       QImage returnImg = img;
       
-      for (int x = 0; x < img.height(); ++x)
+      for (int y = 0; y < img.height(); y++)
       {
-         for (int y = 0; y < img.width(); ++y)
+         QRgb *line = (QRgb *) returnImg.scanLine(y);
+         for (int x = 0; x < img.width(); x++)
          {
-            returnImg.setPixel(x, y, qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0);
+            // line[x] has an individual pixel
+            line[x] = qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0;
          }
       }
       

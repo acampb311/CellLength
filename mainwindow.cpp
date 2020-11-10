@@ -8,12 +8,13 @@ MainWindow::MainWindow(QWidget* parent)
    InitMainWindow();
    CreateActions();
    CreateMenus();
+   CreateToolbars();
    
    setCentralWidget(view);
    
    view->setScene(scene);
    scene->installEventFilter(this);
-   CreateToolbars();
+
    statusBar()->showMessage(tr("Ready"));
 }
 
@@ -58,14 +59,29 @@ void MainWindow::CreateMenus()
 
 void MainWindow::CreateToolbars()
 {
-   QToolBar* toolbar = addToolBar(tr("Threshold"));
+   QToolBar* toolbar = new QToolBar();
+   addToolBar(Qt::LeftToolBarArea, toolbar);
    
+   QWidget* threshSliderWidget = new QWidget(this);
+   QHBoxLayout* threshSliderLayout = new QHBoxLayout(threshSliderWidget);
+   QLabel* threshSliderValueLabel = new QLabel("0");
+   QLabel* threshSliderLabel = new QLabel("Threshold Value:");
+
+   QSlider* threshSlider = new QSlider(Qt::Horizontal, this);
    threshSlider->setMaximum(MAX_THRESH_VAL);
    threshSlider->setMinimum(MIN_THRESH_VAL);
+
+   threshSliderLayout->addWidget(threshSliderLabel);
+   threshSliderLayout->addWidget(threshSlider);
+   threshSliderLayout->addWidget(threshSliderValueLabel);
    
    connect(threshSlider, &QSlider::valueChanged, this, &MainWindow::HandleThresholdSliderChanged);
    
-   toolbar->addWidget(threshSlider);
+   QObject::connect(threshSlider, &QSlider::valueChanged, this, [=] () {
+      threshSliderValueLabel->setText(QString::number(threshSlider->value()));
+   });
+   
+   toolbar->addWidget(threshSliderWidget);
 }
 
 void MainWindow::HandleThresholdSliderChanged(int value)
@@ -88,7 +104,7 @@ void MainWindow::InitMainWindow()
 {
    QScreen* screen = QGuiApplication::primaryScreen();
    QRect screenGeometry = screen->geometry();
-   resize(QSize(screenGeometry.width() / 3, screenGeometry.height() / 2));
+   resize(QSize(screenGeometry.width() / 1.5, screenGeometry.height()/1.5));
 }
 
 void MainWindow::HandleClickEvent(QEvent *event)
@@ -99,12 +115,12 @@ void MainWindow::HandleClickEvent(QEvent *event)
    
    if (img.valid(n->scenePos().toPoint()))
    {
-      stat = "Clicked: {"
-      + QString::number(n->scenePos().toPoint().x())
-      + " , "
-      + QString::number(n->scenePos().toPoint().y())
-      + "} Value: "
-      + QString::number(qGray(img.pixel(n->scenePos().toPoint())));
+      stat  = "Clicked: {"
+            + QString::number(n->scenePos().toPoint().x())
+            + " , "
+            + QString::number(n->scenePos().toPoint().y())
+            + "} Value: "
+            + QString::number(qGray(img.pixel(n->scenePos().toPoint())));
    }
    else
    {

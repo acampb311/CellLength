@@ -23,11 +23,20 @@
 #include <QString>
 #include <QToolBar>
 #include <QThread>
+#include <QStack>
+#include <QVector>
+
 
 class WorkerThread;
 
 #define MAX_THRESH_VAL 255
 #define MIN_THRESH_VAL 0
+
+struct Pixel
+{
+	int x;
+	int y;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -49,7 +58,7 @@ public:
    void HandleThresholdFinished(QImage val);
    
    bool eventFilter(QObject *target, QEvent *event);
-   
+   QVector<Pixel>flood(QImage img, Pixel p);
    
 private:
    QMenu* fileMenu;
@@ -57,7 +66,7 @@ private:
    QGraphicsScene* scene;
    QGraphicsView* view;
    QImage img;
-   
+   int currentThreshold;
    QGraphicsPixmapItem* p = nullptr;
 };
 

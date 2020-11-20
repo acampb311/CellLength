@@ -86,17 +86,16 @@ void MainWindow::CreateToolbars()
 
 void MainWindow::HandleThresholdSliderChanged(int value)
 {
-	WorkerThread* workerThread = new WorkerThread();
-	workerThread->img = img;
-	workerThread->threshVal = value;
+   ThresholdThread* workerThread = new ThresholdThread(value, img);
+
 	currentThreshold = value;
 
-	connect(workerThread, &WorkerThread::resultReady, this, &MainWindow::HandleThresholdFinished);
-	connect(workerThread, &WorkerThread::finished, workerThread, &QObject::deleteLater);
+	connect(workerThread, &ThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
+	connect(workerThread, &ThresholdThread::finished, workerThread, &QObject::deleteLater);
 	workerThread->start();
 }
 
-void MainWindow::HandleThresholdFinished(QImage val)
+void MainWindow::HandleThresholdFinished(const QImage& val)
 {
 	p->setPixmap(QPixmap::fromImage(val));
 }
@@ -126,13 +125,24 @@ void MainWindow::HandleClickEvent(QEvent* event)
 		temp.x = n->scenePos().toPoint().x();
 		temp.y = n->scenePos().toPoint().y();
 
-		flood(img, temp);
+      QVector<Pixel> fourConn = { {0,-1},{-1,0},{0,1},{1,0} };
+      auto ret = flood(p->pixmap().toImage(), temp, fourConn);
+      
+      if (overlay == nullptr)
+      {
+         overlay = scene->addPixmap(QPixmap::fromImage(ret));
+      }
+      else
+      {
+         overlay->setPixmap(QPixmap::fromImage(ret));
+      }
+      
 	}
 	else
 	{
 		stat = "Outside boundary";
 	}
-
+   
 	statusBar()->showMessage(stat);
 }
 
@@ -146,38 +156,25 @@ bool MainWindow::eventFilter(QObject* target, QEvent* event)
 	return QMainWindow::eventFilter(target, event);
 }
 
-QVector<Pixel> MainWindow::flood(QImage img, Pixel p)
+QImage MainWindow::flood(const QImage& img, const Pixel& startPixel, const QVector<Pixel>& conn)
 {
 	QVector<Pixel> s = QVector<Pixel>();
-	s.push_back(p);
-
-	QVector<Pixel> fourConn = { {0,-1},{-1,0},{0,1},{1,0} };
-	int imgWidth = img.width();
-
+   QStack<Pixel> q = QStack<Pixel>();
+	s.push_back(startPixel);
+   q.push(startPixel);
+   
+   QImage *image = new QImage(img.width(), img.height(), QImage::Format_Mono);
+   
 	bool* visited = new bool[img.height() * img.width()]{ false };
-	visited[p.x * img.width() + p.y] = true;
+	visited[startPixel.x * img.width() + startPixel.y] = true;
 
-	QStack<Pixel> q = QStack<Pixel>();
-
-	q.push(p);
-
-	QImage returnImg = img;
-	for (int y = 0; y < img.height(); y++)
-	{
-		QRgb* line = (QRgb*)returnImg.scanLine(y);
-		for (int x = 0; x < img.width(); x++)
-		{
-			// line[x] has an individual pixel
-			line[x] = qGray(img.pixel(x, y)) > currentThreshold ? QColor(Qt::white).rgb() : 0;
-		}
-	}
-
+   QImage ret = img;
 
 	while (q.size() > 0)
 	{
 		Pixel pixelX = q.pop();
 
-		for (const auto& neighbor : fourConn)
+		for (const auto& neighbor : conn)
 		{
 			Pixel pixelY = pixelX;
 			pixelY.x += neighbor.x;
@@ -185,28 +182,40 @@ QVector<Pixel> MainWindow::flood(QImage img, Pixel p)
 
 			if (img.valid(pixelY.x, pixelY.y))
 			{
-				auto g = qGray(img.pixel(pixelY.x, pixelY.y));
-				if (!visited[pixelY.x * imgWidth + pixelY.y] && returnImg.pixel(pixelY.x, pixelY.y) == QColor(Qt::white).rgb())
+				if (!visited[pixelY.x * img.width() + pixelY.y] && img.pixel(pixelY.x, pixelY.y) == QColor(Qt::white).rgb())
 				{
 					s.push_back(pixelY);
-					visited[pixelY.x * imgWidth + pixelY.y] = true;
+					visited[pixelY.x * img.width() + pixelY.y] = true;
 					q.push(pixelY);
 				}
 			}
 		}
 	}
+   
+   image->setColorCount(2);
+   image->setColor(0, qRgba(255, 0, 0, 255)); // Index #0 = Red
+   image->setColor(1, qRgba(0, 0, 0, 0));     // Index #1 = Transparent
 
+   // Testing - Fill the image with pixels:
 
-	QImage img2 = img;
+   for (int y = 0; y < img.height(); y++)
+   {
+      QRgb *line = (QRgb *) image->scanLine(y);
+      for (int x = 0; x < img.width(); x++)
+      {
+         // line[x] has an individual pixel
+         line[x]->setPixel( = qRgba(0, 0, 0, 0);
+      }
+   }
 
-	for (auto p : s)
+	for (const auto& pix : s)
 	{
-		img2.setPixel(QPoint(p.x, p.y), QColor(Qt::blue).rgb());
+      image->setPixel(QPoint(pix.x, pix.y), qRgba(255, 0, 0, 255));
 	}
+   
+   delete[] visited;
 
-	scene->addPixmap(QPixmap::fromImage(img2));
-
-	return s;
+	return ret;
 }
 
 

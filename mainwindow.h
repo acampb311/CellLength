@@ -55,10 +55,10 @@ public:
    void OpenFile();
    void HandleClickEvent(QEvent *event);
    void HandleThresholdSliderChanged(int value);
-   void HandleThresholdFinished(QImage val);
+   void HandleThresholdFinished(const QImage& val);
    
    bool eventFilter(QObject *target, QEvent *event);
-   QVector<Pixel>flood(QImage img, Pixel p);
+   QImage flood(const QImage& img, const Pixel& p, const QVector<Pixel>& conn);
    
 private:
    QMenu* fileMenu;
@@ -68,17 +68,22 @@ private:
    QImage img;
    int currentThreshold;
    QGraphicsPixmapItem* p = nullptr;
+   QGraphicsPixmapItem* overlay = nullptr;
 };
 
-class WorkerThread : public QThread
+class ThresholdThread : public QThread
 {
    Q_OBJECT
 public:
-   int threshVal = 0;
-   QImage img;
-   
-   void run() override {
+   ThresholdThread(const int& threshold, const QImage& img)
+      : threshVal(threshold)
+      , img(img)
+   {
       
+   }
+   
+   void run() override
+   {
       QImage returnImg = img;
       
       for (int y = 0; y < img.height(); y++)
@@ -94,9 +99,81 @@ public:
       emit resultReady(returnImg);
    }
    
+private:
+   int threshVal = 0;
+   QImage img;
+   
 signals:
    void resultReady(const QImage& s);
 };
+
+class FloodThread : public QThread
+{
+   Q_OBJECT
+public:
+   FloodThread(const QImage& img, const Pixel& p, const QVector<Pixel>& conn)
+      : img(img)
+      , p(p)
+      , conn(conn)
+   {
+      
+   }
+   
+   void run() override
+   {
+      QVector<Pixel> s = QVector<Pixel>();
+      s.push_back(p);
+      
+      int imgWidth = img.width();
+
+      bool* visited = new bool[img.height() * img.width()]{ false };
+      visited[p.x * img.width() + p.y] = true;
+
+      QStack<Pixel> q = QStack<Pixel>();
+
+      q.push(p);
+
+      while (q.size() > 0)
+      {
+         Pixel pixelX = q.pop();
+
+         for (const auto& neighbor : conn)
+         {
+            Pixel pixelY = pixelX;
+            pixelY.x += neighbor.x;
+            pixelY.y += neighbor.y;
+
+            if (img.valid(pixelY.x, pixelY.y))
+            {
+               if (!visited[pixelY.x * imgWidth + pixelY.y] && img.pixel(pixelY.x, pixelY.y) == QColor(Qt::white).rgb())
+               {
+                  s.push_back(pixelY);
+                  visited[pixelY.x * imgWidth + pixelY.y] = true;
+                  q.push(pixelY);
+               }
+            }
+         }
+      }
+
+      for (auto p : s)
+      {
+         img.setPixel(QPoint(p.x, p.y), QColor(Qt::blue).rgb());
+      }
+      
+      delete[] visited;
+      
+      emit resultReady(img);
+   }
+   
+private:
+   Pixel p;
+   QVector<Pixel> conn;
+   QImage img;
+   
+signals:
+   void resultReady(const QImage& s);
+};
+
 
 
 // https://doc.qt.io/qt-5/qtwidgets-widgets-imageviewer-example.html

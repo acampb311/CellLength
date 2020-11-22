@@ -10,6 +10,8 @@ MainWindow::MainWindow(QWidget* parent)
 	CreateMenus();
 	CreateToolbars();
 
+	currentConn = fourConnn;
+
 	setCentralWidget(view);
 
 	view->setScene(scene);
@@ -81,12 +83,15 @@ void MainWindow::CreateToolbars()
 		threshSliderValueLabel->setText(QString::number(threshSlider->value()));
 		});
 
+	auto connectivityButtons = CreateConnectivityButtons();
+
 	toolbar->addWidget(threshSliderWidget);
+	toolbar->addWidget(connectivityButtons);
 }
 
 void MainWindow::HandleThresholdSliderChanged(int value)
 {
-   ThresholdThread* workerThread = new ThresholdThread(value, img);
+	ThresholdThread* workerThread = new ThresholdThread(value, img);
 
 	currentThreshold = value;
 
@@ -98,6 +103,18 @@ void MainWindow::HandleThresholdSliderChanged(int value)
 void MainWindow::HandleThresholdFinished(const QImage& val)
 {
 	p->setPixmap(QPixmap::fromImage(val));
+}
+
+void MainWindow::HandleFloodFinished(const QImage& val)
+{
+	if (overlay == nullptr)
+	{
+		overlay = scene->addPixmap(QPixmap::fromImage(val));
+	}
+	else
+	{
+		overlay->setPixmap(QPixmap::fromImage(val));
+	}
 }
 
 void MainWindow::InitMainWindow()
@@ -121,28 +138,20 @@ void MainWindow::HandleClickEvent(QEvent* event)
 			+ QString::number(n->scenePos().toPoint().y())
 			+ "} Value: "
 			+ QString::number(qGray(img.pixel(n->scenePos().toPoint())));
-		Pixel temp;
-		temp.x = n->scenePos().toPoint().x();
-		temp.y = n->scenePos().toPoint().y();
 
-      QVector<Pixel> fourConn = { {0,-1},{-1,0},{0,1},{1,0} };
-      auto ret = flood(p->pixmap().toImage(), temp, fourConn);
-      
-      if (overlay == nullptr)
-      {
-         overlay = scene->addPixmap(QPixmap::fromImage(ret));
-      }
-      else
-      {
-         overlay->setPixmap(QPixmap::fromImage(ret));
-      }
-      
+		this->lastClickedPixel = Pixel(n);
+
+		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(n), (*currentConn));
+
+		connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
+		connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
+		workerThread->start();
 	}
 	else
 	{
 		stat = "Outside boundary";
 	}
-   
+
 	statusBar()->showMessage(stat);
 }
 
@@ -156,66 +165,41 @@ bool MainWindow::eventFilter(QObject* target, QEvent* event)
 	return QMainWindow::eventFilter(target, event);
 }
 
-QImage MainWindow::flood(const QImage& img, const Pixel& startPixel, const QVector<Pixel>& conn)
+QGroupBox* MainWindow::CreateConnectivityButtons()
 {
-	QVector<Pixel> s = QVector<Pixel>();
-   QStack<Pixel> q = QStack<Pixel>();
-	s.push_back(startPixel);
-   q.push(startPixel);
-   
-   QImage *image = new QImage(img.width(), img.height(), QImage::Format_Mono);
-   
-	bool* visited = new bool[img.height() * img.width()]{ false };
-	visited[startPixel.x * img.width() + startPixel.y] = true;
+	QGroupBox* groupBox = new QGroupBox(tr("Connectivity"));
 
-   QImage ret = img;
+	QRadioButton* fourWay = new QRadioButton(tr("4 Way"));
+	QRadioButton* eightWay = new QRadioButton(tr("8 Way"));
+	fourWay->setChecked(true); 
+	QVBoxLayout* vbox = new QVBoxLayout;
+	vbox->addWidget(fourWay);
+	vbox->addWidget(eightWay);
 
-	while (q.size() > 0)
-	{
-		Pixel pixelX = q.pop();
+	QObject::connect(fourWay, &QRadioButton::clicked, this, [=]() {
+		currentConn = fourConnn;
 
-		for (const auto& neighbor : conn)
-		{
-			Pixel pixelY = pixelX;
-			pixelY.x += neighbor.x;
-			pixelY.y += neighbor.y;
+		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(lastClickedPixel), (*currentConn));
 
-			if (img.valid(pixelY.x, pixelY.y))
-			{
-				if (!visited[pixelY.x * img.width() + pixelY.y] && img.pixel(pixelY.x, pixelY.y) == QColor(Qt::white).rgb())
-				{
-					s.push_back(pixelY);
-					visited[pixelY.x * img.width() + pixelY.y] = true;
-					q.push(pixelY);
-				}
-			}
-		}
-	}
-   
-   image->setColorCount(2);
-   image->setColor(0, qRgba(255, 0, 0, 255)); // Index #0 = Red
-   image->setColor(1, qRgba(0, 0, 0, 0));     // Index #1 = Transparent
+		connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
+		connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
+		workerThread->start();
+		});
 
-   // Testing - Fill the image with pixels:
+	QObject::connect(eightWay, &QRadioButton::clicked, this, [=]() {
+		currentConn = eightConn;
 
-   for (int y = 0; y < img.height(); y++)
-   {
-      QRgb *line = (QRgb *) image->scanLine(y);
-      for (int x = 0; x < img.width(); x++)
-      {
-         // line[x] has an individual pixel
-         line[x]->setPixel( = qRgba(0, 0, 0, 0);
-      }
-   }
+		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(lastClickedPixel), (*currentConn));
 
-	for (const auto& pix : s)
-	{
-      image->setPixel(QPoint(pix.x, pix.y), qRgba(255, 0, 0, 255));
-	}
-   
-   delete[] visited;
+		connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
+		connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
+		workerThread->start();
+		});
 
-	return ret;
+	vbox->addStretch(1);
+	groupBox->setLayout(vbox);
+
+	return groupBox;
 }
 
 

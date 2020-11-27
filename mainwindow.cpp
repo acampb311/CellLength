@@ -66,37 +66,37 @@ void MainWindow::CreateToolbars()
 
 	QWidget* threshSliderWidget = new QWidget(this);
 	QHBoxLayout* threshSliderLayout = new QHBoxLayout(threshSliderWidget);
-	QLabel* threshSliderValueLabel = new QLabel("0");
-	QLabel* threshSliderLabel = new QLabel("Threshold Value:");
+   
+   QLabel* threshSliderLabel = new QLabel("Threshold:");
+   
+   QSlider* threshSlider = new QSlider(Qt::Horizontal, this);
+   threshSlider->setRange(MIN_THRESH_VAL, MAX_THRESH_VAL);
 
-	QSlider* threshSlider = new QSlider(Qt::Horizontal, this);
-	threshSlider->setMaximum(MAX_THRESH_VAL);
-	threshSlider->setMinimum(MIN_THRESH_VAL);
+   QSpinBox* threshSpinBox = new QSpinBox();
+   threshSpinBox->setRange(MIN_THRESH_VAL, MAX_THRESH_VAL);
 
 	threshSliderLayout->addWidget(threshSliderLabel);
 	threshSliderLayout->addWidget(threshSlider);
-	threshSliderLayout->addWidget(threshSliderValueLabel);
+   threshSliderLayout->addWidget(threshSpinBox);
 
-	connect(threshSlider, &QSlider::valueChanged, this, &MainWindow::HandleThresholdSliderChanged);
+   QObject::connect(threshSlider, &QSlider::valueChanged, this, &MainWindow::HandleThresholdSliderChanged);
 
-	QObject::connect(threshSlider, &QSlider::valueChanged, this, [=]() {
-		threshSliderValueLabel->setText(QString::number(threshSlider->value()));
-		});
-
-	auto connectivityButtons = CreateConnectivityButtons();
-
+   QObject::connect(threshSlider, QOverload<int>::of(&QSlider::valueChanged),
+                    [=](int threshValue){ threshSpinBox->setValue(threshValue); });
+   
+   QObject::connect(threshSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+                    [=](int threshValue){ threshSlider->setValue(threshValue); });
+   
 	toolbar->addWidget(threshSliderWidget);
-	toolbar->addWidget(connectivityButtons);
+	toolbar->addWidget(CreateConnectivityButtons());
 }
 
 void MainWindow::HandleThresholdSliderChanged(int value)
 {
 	ThresholdThread* workerThread = new ThresholdThread(value, img);
 
-	currentThreshold = value;
-
-	connect(workerThread, &ThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
-	connect(workerThread, &ThresholdThread::finished, workerThread, &QObject::deleteLater);
+   QObject::connect(workerThread, &ThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
+   QObject::connect(workerThread, &ThresholdThread::finished, workerThread, &QObject::deleteLater);
 	workerThread->start();
 }
 
@@ -143,8 +143,8 @@ void MainWindow::HandleClickEvent(QEvent* event)
 
 		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(n), (*currentConn));
 
-		connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
-		connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
+      QObject::connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
+      QObject::connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
 		workerThread->start();
 	}
 	else

@@ -20,6 +20,7 @@
 #include <QRect>
 #include <QScreen>
 #include <QSlider>
+#include <QSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QString>
@@ -74,7 +75,6 @@ private:
 	QGraphicsScene* scene;
 	QGraphicsView* view;
 	QImage img;
-	int currentThreshold;
 	Pixel lastClickedPixel = {};
 	QGraphicsPixmapItem* p = nullptr;
 	QGraphicsPixmapItem* overlay = nullptr;
@@ -95,17 +95,20 @@ public:
 	void run() override
 	{
 		QImage returnImg = img;
-
-		for (int y = 0; y < img.height(); y++)
-		{
-			QRgb* line = (QRgb*)returnImg.scanLine(y);
-			for (int x = 0; x < img.width(); x++)
-			{
-				// line[x] has an individual pixel
-				line[x] = qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0;
-			}
-		}
-
+      
+      if (threshVal != 0)
+      {
+         for (int y = 0; y < img.height(); y++)
+         {
+            QRgb* line = (QRgb*)returnImg.scanLine(y);
+            for (int x = 0; x < img.width(); x++)
+            {
+               // line[x] has an individual pixel
+               line[x] = qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0;
+            }
+         }
+      }
+      
 		emit resultReady(returnImg);
 	}
 

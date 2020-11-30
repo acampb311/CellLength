@@ -64,10 +64,15 @@ void MainWindow::CreateToolbars()
 	QToolBar* toolbar = new QToolBar();
 	addToolBar(Qt::LeftToolBarArea, toolbar);
 
-	QWidget* threshSliderWidget = new QWidget(this);
-	QHBoxLayout* threshSliderLayout = new QHBoxLayout(threshSliderWidget);
+	toolbar->addWidget(CreateThresholdControls());
+	toolbar->addWidget(CreateConnectivityButtons());
+}
+
+QGroupBox* MainWindow::CreateThresholdControls()
+{
+   QGroupBox* threshBox = new QGroupBox(tr("Threshold"));
    
-   QLabel* threshSliderLabel = new QLabel("Threshold:");
+   QHBoxLayout* threshSliderLayout = new QHBoxLayout(threshBox);
    
    QSlider* threshSlider = new QSlider(Qt::Horizontal, this);
    threshSlider->setRange(MIN_THRESH_VAL, MAX_THRESH_VAL);
@@ -75,8 +80,7 @@ void MainWindow::CreateToolbars()
    QSpinBox* threshSpinBox = new QSpinBox();
    threshSpinBox->setRange(MIN_THRESH_VAL, MAX_THRESH_VAL);
 
-	threshSliderLayout->addWidget(threshSliderLabel);
-	threshSliderLayout->addWidget(threshSlider);
+   threshSliderLayout->addWidget(threshSlider);
    threshSliderLayout->addWidget(threshSpinBox);
 
    QObject::connect(threshSlider, &QSlider::valueChanged, this, &MainWindow::HandleThresholdSliderChanged);
@@ -87,8 +91,7 @@ void MainWindow::CreateToolbars()
    QObject::connect(threshSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
                     [=](int threshValue){ threshSlider->setValue(threshValue); });
    
-	toolbar->addWidget(threshSliderWidget);
-	toolbar->addWidget(CreateConnectivityButtons());
+   return threshBox;
 }
 
 void MainWindow::HandleThresholdSliderChanged(int value)
@@ -168,18 +171,18 @@ bool MainWindow::eventFilter(QObject* target, QEvent* event)
 QGroupBox* MainWindow::CreateConnectivityButtons()
 {
 	QGroupBox* groupBox = new QGroupBox(tr("Connectivity"));
+   QVBoxLayout* vbox = new QVBoxLayout(groupBox);
 
 	QRadioButton* fourWay = new QRadioButton(tr("4 Way"));
 	QRadioButton* eightWay = new QRadioButton(tr("8 Way"));
 	fourWay->setChecked(true); 
-	QVBoxLayout* vbox = new QVBoxLayout;
 	vbox->addWidget(fourWay);
 	vbox->addWidget(eightWay);
 
 	QObject::connect(fourWay, &QRadioButton::clicked, this, [=]() {
 		currentConn = fourConnn;
 
-		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(lastClickedPixel), (*currentConn));
+		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(this->lastClickedPixel), (*currentConn));
 
 		connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
 		connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
@@ -189,15 +192,12 @@ QGroupBox* MainWindow::CreateConnectivityButtons()
 	QObject::connect(eightWay, &QRadioButton::clicked, this, [=]() {
 		currentConn = eightConn;
 
-		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(lastClickedPixel), (*currentConn));
+		FloodThread* workerThread = new FloodThread(p->pixmap().toImage(), Pixel(this->lastClickedPixel), (*currentConn));
 
 		connect(workerThread, &FloodThread::resultReady, this, &MainWindow::HandleFloodFinished);
 		connect(workerThread, &FloodThread::finished, workerThread, &QObject::deleteLater);
 		workerThread->start();
 		});
-
-	vbox->addStretch(1);
-	groupBox->setLayout(vbox);
 
 	return groupBox;
 }

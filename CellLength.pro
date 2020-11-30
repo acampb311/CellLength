@@ -1,5 +1,5 @@
 QT       += core gui
-
+QT 	+= testlib
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++11
@@ -10,10 +10,12 @@ CONFIG += c++11
 
 SOURCES += \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    ImageOps.cpp
 
 HEADERS += \
-    mainwindow.h
+    mainwindow.h \
+    ImageOps.h
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

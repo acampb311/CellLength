@@ -30,17 +30,11 @@
 
 #include <QVector>
 
-#include <bitset>
 
 #include "ImageOps.h"
 
 #define MAX_THRESH_VAL 255
 #define MIN_THRESH_VAL 0
-
-static constexpr bool isSimpleTable[] =
-{
-   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,1,0,1,1,1,1,0,0,1,1,0,0
-};
 
 class MainWindow : public QMainWindow
 {
@@ -89,22 +83,7 @@ public:
 
 	void run() override
 	{
-		QImage returnImg = img;
-      
-      if (threshVal != 0)
-      {
-         for (int y = 0; y < img.height(); y++)
-         {
-            QRgb* line = (QRgb*)returnImg.scanLine(y);
-            for (int x = 0; x < img.width(); x++)
-            {
-               // line[x] has an individual pixel
-               line[x] = qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0;
-            }
-         }
-      }
-      
-		emit resultReady(returnImg);
+		emit resultReady(ImageOps::Threshold(img, threshVal));
 	}
 
 private:
@@ -126,48 +105,9 @@ public:
 
 	void run() override
 	{
-		QVector<Pixel> s = QVector<Pixel>();
-		QStack<Pixel> q = QStack<Pixel>();
-		s.push_back(startPixel);
-		q.push(startPixel);
+      QVector<Pixel> s = ImageOps::Flood(img, startPixel, conn);
 
-		QPixmap temp(img.size());
-		temp.fill(Qt::transparent);
-
-		QImage image = QImage(temp.toImage());
-
-		bool* visited = new bool[img.height() * img.width()]{ false };
-		visited[startPixel.x * img.width() + startPixel.y] = true;
-
-		while (q.size() > 0)
-		{
-			Pixel pixelX = q.pop();
-
-			for (const auto& neighbor : conn)
-			{
-				Pixel pixelY = Pixel(pixelX, neighbor);
-
-				if (img.valid(pixelY.x, pixelY.y))
-				{
-					if (!visited[pixelY.x * img.width() + pixelY.y] && img.pixel(pixelY.x, pixelY.y) == QColor(Qt::white).rgb())
-					{
-						s.push_back(pixelY);
-						visited[pixelY.x * img.width() + pixelY.y] = true;
-						q.push(pixelY);
-					}
-				}
-			}
-		}
-
-		//TODO need to figure out how to get rid of setPixel
-		for (const auto& pix : s)
-		{
-			image.setPixel(QPoint(pix.x, pix.y), QColor(Qt::red).rgb());
-		}
-
-		delete[] visited;
-
-		emit resultReady(image);
+		emit resultReady(ImageOps::ImageFromPixelSet(img, s));
 	}
 
 private:
@@ -195,9 +135,9 @@ public:
          for (int x = 0; x < img.width(); x++)
          {
             if (line[x] == QColor(Qt::white).rgb()
-                && IsBorder(img, Pixel(x,y))
-                && IsSimple(img, Pixel(x,y))
-                && !IsCurveEnd(img, Pixel(x,y)))
+                && ImageOps::IsBorder(img, Pixel(x,y))
+                && ImageOps::IsSimple(img, Pixel(x,y))
+                && !ImageOps::IsCurveEnd(img, Pixel(x,y)))
             {
                line[x] = QColor(Qt::red).rgb();
             }
@@ -209,72 +149,7 @@ public:
 
 private:
    QImage img;
-
-   QVector<Pixel> neigh = QVector<Pixel>({ {-1,-1},{0,-1}, {1,-1}, {-1,0},{0,0},{1,0},{-1,1},{0,1},{1,1}});
-   QVector<Pixel> border = QVector<Pixel>({ {-1,-1},{0,-1}, {1,-1}, {-1,0},{1,0},{-1,1},{0,1},{1,1}});
-
-   int ImageValue(const QImage& img, const Pixel& p)
-   {
-      if (img.valid(p.x, p.y))
-      {
-         return img.pixel(p.x, p.y) == QColor(Qt::white).rgb();
-      }
-      
-      return 0;
-   }
    
-   bool IsBorder(const QImage& img, const Pixel& p)
-   {
-      for (const auto& pix : border)
-      {
-         Pixel tempPix = Pixel(p,pix);
-         if (img.valid(tempPix.x, tempPix.y))
-         {
-            if (img.pixel(tempPix.x, tempPix.y) == QColor(Qt::black).rgb())
-            {
-               return true;
-            }
-         }
-      }
-      
-      return false;
-   }
-   
-   bool IsCurveEnd(const QImage& img, const Pixel& p)
-   {
-      int numberNeighbors = 0;
-      for (const auto& pix : border)
-      {
-         Pixel tempPix = Pixel(p,pix);
-         if (img.valid(tempPix.x, tempPix.y))
-         {
-            if (img.pixel(tempPix.x, tempPix.y) == QColor(Qt::white).rgb())
-            {
-               numberNeighbors++;
-               if (numberNeighbors > 1)
-               {
-                  return false;
-               }
-            }
-         }
-      }
-      
-      return true;
-   }
-   
-   bool IsSimple(const QImage& img, const Pixel& p)
-   {
-      std::bitset<9> simpleKey;
-      
-      int idx = 0;
-      for (const auto& pix : neigh)
-      {
-         simpleKey[idx] = ImageValue(img, Pixel(Pixel(p.x, p.y),pix));
-         idx++;
-      }
-
-      return isSimpleTable[simpleKey.to_ulong()];
-   }
    
 signals:
    void resultReady(const QImage& s);

@@ -75,7 +75,7 @@ int ImageOps::ImageValue(const QImage& img, const Pixel& p)
 {
    if (img.valid(p.x, p.y))
    {
-      return img.pixel(p.x, p.y) == QColor(Qt::white).rgb();
+      return img.pixel(p.x, p.y) == QColor(Qt::red).rgb();
    }
    
    return 0;
@@ -156,4 +156,22 @@ bool ImageOps::IsSimple(const QImage& img, const Pixel& p)
    }
 
    return isSimpleTable[simpleKey.to_ulong()];
+}
+
+QVector<Pixel> ImageOps::GetBorderPixels(const QImage& img)
+{
+	auto borderPixs = QVector<Pixel>();
+
+	for (int y = 0; y < img.height(); y++)
+	{
+		for (int x = 0; x < img.width(); x++)
+		{
+			if (IsBorder(img, Pixel(x, y)))
+			{
+				borderPixs.push_back(Pixel(x, y));
+			}
+		}
+	}
+
+	return borderPixs;
 }

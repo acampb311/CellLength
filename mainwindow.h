@@ -128,22 +128,27 @@ public:
 
    void run() override
    {
-      for (int y = 0; y < img.height(); y++)
+      while (true)
       {
-         QRgb* line = (QRgb*)img.scanLine(y);
+         auto borderPixels = ImageOps::GetBorderPixels(img);
+         int numRemoved = 0;
 
-         for (int x = 0; x < img.width(); x++)
+         for (const auto& currentPix : borderPixels)
          {
-            if (line[x] == QColor(Qt::white).rgb()
-                && ImageOps::IsBorder(img, Pixel(x,y))
-                && ImageOps::IsSimple(img, Pixel(x,y))
-                && !ImageOps::IsCurveEnd(img, Pixel(x,y)))
+            if (ImageOps::IsSimple(img, currentPix) && !ImageOps::IsCurveEnd(img, currentPix))
             {
-               line[x] = QColor(Qt::red).rgb();
+               numRemoved++;
+
+               img.setPixel(QPoint(currentPix.x, currentPix.y), QColor(Qt::black).rgb());
             }
          }
+
+         if (numRemoved == 0)
+         {
+            break;
+         }
       }
-      
+     
       emit resultReady(img);
    }
 

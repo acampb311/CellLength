@@ -64,8 +64,18 @@ void MainWindow::CreateToolbars()
 	QToolBar* toolbar = new QToolBar();
 	addToolBar(Qt::LeftToolBarArea, toolbar);
 
+   QPushButton* thinButton = new QPushButton(tr("Thin"));
+   QObject::connect(thinButton, &QPushButton::clicked, this, [=]() {
+      ThinThread* thinThread = new ThinThread(overlay->pixmap().toImage());
+
+      connect(thinThread, &ThinThread::resultReady, this, &MainWindow::HandleFloodFinished);
+      connect(thinThread, &ThinThread::finished, thinThread, &QObject::deleteLater);
+      thinThread->start();
+      });
+
 	toolbar->addWidget(CreateThresholdControls());
-	toolbar->addWidget(CreateConnectivityButtons());
+   toolbar->addWidget(CreateConnectivityButtons());
+   toolbar->addWidget(thinButton);
 }
 
 QGroupBox* MainWindow::CreateThresholdControls()

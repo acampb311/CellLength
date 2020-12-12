@@ -45,6 +45,8 @@ bool IsCurveEnd(const QImage& img, const Pixel& p);
 
 bool IsSimple(const QImage& img, const Pixel& p);
 
+QVector<Pixel> GetBorderPixels(const QImage& img);
+
 }
 
 static QVector<Pixel> neigh = QVector<Pixel>({ {-1,-1},{0,-1}, {1,-1}, {-1,0},{0,0},{1,0},{-1,1},{0,1},{1,1}});

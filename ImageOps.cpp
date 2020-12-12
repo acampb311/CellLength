@@ -83,15 +83,20 @@ int ImageOps::ImageValue(const QImage& img, const Pixel& p)
 
 bool ImageOps::IsBorder(const QImage& img, const Pixel& p)
 {
+   //If the pixel we are looking at currently is background, no need to look any further.
+   if (ImageValue(img, p) == 0)
+   {
+      return false;
+   }
+   
+   //look through the surrounding 8 pixels to see if any are background.
    for (const auto& pix : border)
    {
-      Pixel tempPix = Pixel(p,pix);
-      if (img.valid(tempPix.x, tempPix.y))
+      //If any of the surrounding pixels are 0 (background) we are on a border pixel since
+      //we have already determined that the central pixel is a an object.
+      if (ImageValue(img, Pixel(p,pix)) == 0)
       {
-         if (img.pixel(tempPix.x, tempPix.y) == QColor(Qt::black).rgb())
-         {
-            return true;
-         }
+         return true;
       }
    }
    
@@ -100,19 +105,26 @@ bool ImageOps::IsBorder(const QImage& img, const Pixel& p)
 
 bool ImageOps::IsCurveEnd(const QImage& img, const Pixel& p)
 {
+   //If the pixel we are looking at currently is background, no need to look any further.
+   if (ImageValue(img, p) == 0)
+   {
+      return false;
+   }
+   
+   //Keep track of the number of neighboring pixels, if this value goes above 1, we know
+   //that we are not a curve end.
    int numberNeighbors = 0;
+   
+   //Go through the 8 bordering pixels to see how many are object pixels
    for (const auto& pix : border)
    {
-      Pixel tempPix = Pixel(p,pix);
-      if (img.valid(tempPix.x, tempPix.y))
+      if (ImageValue(img, Pixel(p,pix)) == 1)
       {
-         if (img.pixel(tempPix.x, tempPix.y) == QColor(Qt::white).rgb())
+         numberNeighbors++;
+         
+         if (numberNeighbors > 1)
          {
-            numberNeighbors++;
-            if (numberNeighbors > 1)
-            {
-               return false;
-            }
+            return false;
          }
       }
    }
@@ -124,10 +136,22 @@ bool ImageOps::IsSimple(const QImage& img, const Pixel& p)
 {
    std::bitset<9> simpleKey;
    
+   //construct a binary key according to the following pixel
+   //positions in a 3x3 matrix
+   //0 1 2
+   //3 4 5
+   //6 7 8
+   
+   //ex.
+   //1 0 0
+   //1 0 1
+   //0 1 0
+   //would be represented by {1,0,0,1,0,1,0,1,0} and the final value of 298.
+   //This relys on our previously constructed simple cell lookup table.
    int idx = 0;
    for (const auto& pix : neigh)
    {
-      simpleKey[idx] = ImageValue(img, Pixel(Pixel(p.x, p.y),pix));
+      simpleKey[idx] = ImageValue(img, Pixel(Pixel(p.x, p.y), pix));
       idx++;
    }
 

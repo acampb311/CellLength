@@ -73,6 +73,12 @@ void MainWindow::CreateToolbars()
       thinThread->start();
       });
 
+
+   this->operationProgress = new QProgressBar();
+   this->operationProgress->setRange(0, 100);
+
+   //   this->operationProgress->setVisible(false);
+   
 	toolbar->addWidget(CreateThresholdControls());
    toolbar->addWidget(CreateConnectivityButtons());
    toolbar->addWidget(thinButton);
@@ -81,9 +87,13 @@ void MainWindow::CreateToolbars()
 QGroupBox* MainWindow::CreateThresholdControls()
 {
    QGroupBox* threshBox = new QGroupBox(tr("Threshold"));
-   
-   QHBoxLayout* threshSliderLayout = new QHBoxLayout(threshBox);
-   
+   QVBoxLayout* thresholdControls = new QVBoxLayout(threshBox);
+   thresholdControls->setContentsMargins(0, 0, 0, 0);
+
+   QWidget* manualSlider = new QWidget();
+   QHBoxLayout* threshSliderLayout = new QHBoxLayout(manualSlider);
+   threshSliderLayout->setContentsMargins(0, 0, 0, 0);
+
    QSlider* threshSlider = new QSlider(Qt::Horizontal, this);
    threshSlider->setRange(MIN_THRESH_VAL, MAX_THRESH_VAL);
 
@@ -101,12 +111,66 @@ QGroupBox* MainWindow::CreateThresholdControls()
    QObject::connect(threshSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
                     [=](int threshValue){ threshSlider->setValue(threshValue); });
    
+   
+   QWidget* otsuCalcWidget = new QWidget();
+   QHBoxLayout* otsuLayout = new QHBoxLayout(otsuCalcWidget);
+   otsuLayout->setContentsMargins(0, 0, 0, 0);
+   
+   QPushButton* otsuButton = new QPushButton(tr("Run"));
+   otsuLayout->addWidget(new QLabel("Otsu Threshold:"));
+   otsuLayout->addWidget(this->otsuThresholdLabel);
+   otsuLayout->addWidget(otsuButton);
+   QObject::connect(otsuButton, &QPushButton::clicked, this, [=]() {
+      OtsuThresholdThread* otsuThread = new OtsuThresholdThread(img);
+
+      connect(otsuThread, &OtsuThresholdThread::ThresholdReady, this, &MainWindow::HandleOtsuThresholdReady);
+      connect(otsuThread, &OtsuThresholdThread::finished, otsuThread, &QObject::deleteLater);
+      otsuThread->start();
+      });
+   
+   QWidget* adaptThreshWidget = new QWidget();
+   QHBoxLayout* adaptThreshLayout = new QHBoxLayout(adaptThreshWidget);
+   adaptThreshLayout->setContentsMargins(0, 0, 0, 0);
+   
+   QLineEdit* areaLineEdit = new QLineEdit();
+   areaLineEdit->setMaximumWidth(40);
+   QLineEdit* cLineEdit = new QLineEdit();
+   cLineEdit->setMaximumWidth(40);
+   QPushButton* adaptButton = new QPushButton(tr("Run"));
+   adaptThreshLayout->addWidget(new QLabel("Area:"));
+   adaptThreshLayout->addWidget(areaLineEdit);
+   adaptThreshLayout->addWidget(new QLabel("C:"));
+   adaptThreshLayout->addWidget(cLineEdit);
+   adaptThreshLayout->addWidget(adaptButton);
+
+   QObject::connect(adaptButton, &QPushButton::clicked, this, [=]() {
+      AdaptThresholdThread* workerThread = new AdaptThresholdThread(areaLineEdit->text().toInt(), cLineEdit->text().toInt(), img);
+
+      QObject::connect(workerThread, &AdaptThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
+      QObject::connect(workerThread, &AdaptThresholdThread::ProgressUpdate, this, &MainWindow::HandleProgressUpdate);
+      QObject::connect(workerThread, &AdaptThresholdThread::finished, workerThread, &QObject::deleteLater);
+      workerThread->start();
+      
+      });
+   
+   thresholdControls->addWidget(manualSlider);
+   thresholdControls->addWidget(otsuCalcWidget);
+   thresholdControls->addWidget(adaptThreshWidget);
+   thresholdControls->addWidget(this->operationProgress);
+   this->operationProgress->setVisible(false);
+
+   
    return threshBox;
+}
+
+void MainWindow::HandleOtsuThresholdReady(const int& t)
+{
+   this->otsuThresholdLabel->setText(QString::number(t));
 }
 
 void MainWindow::HandleThresholdSliderChanged(int value)
 {
-	ThresholdThread* workerThread = new ThresholdThread(value, img);
+   ThresholdThread* workerThread = new ThresholdThread(value, img);
 
    QObject::connect(workerThread, &ThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
    QObject::connect(workerThread, &ThresholdThread::finished, workerThread, &QObject::deleteLater);
@@ -128,6 +192,18 @@ void MainWindow::HandleFloodFinished(const QImage& val)
 	{
 		overlay->setPixmap(QPixmap::fromImage(val));
 	}
+}
+
+void MainWindow::HandleProgressUpdate(const int& percentDone)
+{
+   this->operationProgress->setVisible(true);
+   this->operationProgress->setValue(percentDone);
+
+   if (percentDone == 99)
+   {
+      this->operationProgress->setVisible(false);
+   }
+
 }
 
 void MainWindow::InitMainWindow()

@@ -12,9 +12,11 @@
 #include <QImageReader>
 #include <QImageWriter>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMainWindow>
 #include <QMenuBar>
 #include <QPixmap>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRect>
@@ -28,13 +30,15 @@
 #include <QThread>
 #include <QStack>
 
+#include <QFormLayout>
+
 #include <QVector>
 
 
-#include "ImageOps.h"
+#include <iostream>
 
-#define MAX_THRESH_VAL 255
-#define MIN_THRESH_VAL 0
+
+#include "ImageOps.h"
 
 class MainWindow : public QMainWindow
 {
@@ -54,7 +58,8 @@ private slots:
 	void HandleThresholdSliderChanged(int value);
 	void HandleThresholdFinished(const QImage& val);
 	void HandleFloodFinished(const QImage& val);
-
+   void HandleProgressUpdate(const int& percentDone);
+   void HandleOtsuThresholdReady(const int& t);
 	bool eventFilter(QObject* target, QEvent* event);
 
 private:
@@ -63,9 +68,11 @@ private:
 	QGraphicsScene* scene;
 	QGraphicsView* view;
 	QImage img;
+   QProgressBar* operationProgress = nullptr;
 	Pixel lastClickedPixel = {};
 	QGraphicsPixmapItem* p = nullptr;
 	QGraphicsPixmapItem* overlay = nullptr;
+   QLabel* otsuThresholdLabel = new QLabel("NA");
 	QGroupBox* CreateConnectivityButtons();
    QGroupBox* CreateThresholdControls();
 	QVector<Pixel>* currentConn = nullptr;
@@ -92,6 +99,64 @@ private:
 
 signals:
 	void resultReady(const QImage& s);
+};
+
+class AdaptThresholdThread : public QThread
+{
+   Q_OBJECT
+public:
+   AdaptThresholdThread(const int& area, const int& c, const QImage& img)
+      : area(area)
+      , c(c)
+      , img(img) {};
+
+   void run() override
+   {
+      QImage returnImg = img;
+
+      for (int y = 0; y < img.height(); y++)
+      {
+         QRgb* line = (QRgb*)returnImg.scanLine(y);
+         
+         for (int x = 0; x < img.width(); x++)
+         {
+            // line[x] has an individual pixel
+            line[x] = qGray(img.pixel(x, y)) > (ImageOps::GetAreaMean(img, Pixel(x,y), area) - c)? QColor(Qt::white).rgb() : 0;
+         }
+         
+         emit ProgressUpdate(((double)y/img.height())*100);
+      }
+      
+      emit resultReady(returnImg);
+   }
+
+private:
+   int area = 0;
+   int c = 0;
+   QImage img;
+
+signals:
+   void ProgressUpdate(const int&);
+   void resultReady(const QImage& s);
+};
+
+class OtsuThresholdThread : public QThread
+{
+   Q_OBJECT
+public:
+   OtsuThresholdThread(const QImage& img)
+      : img(img) {};
+
+   void run() override
+   {
+      ThresholdReady(ImageOps::CalculateOtsu(img));
+   }
+
+private:
+   QImage img;
+
+signals:
+   void ThresholdReady(const int&);
 };
 
 class FloodThread : public QThread

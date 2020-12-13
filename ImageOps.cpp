@@ -1,4 +1,5 @@
 #include "ImageOps.h"
+#include <QtConcurrent/QtConcurrent>
 
 QImage ImageOps::Threshold(const QImage& img, const int& threshVal)
 {
@@ -11,6 +12,8 @@ QImage ImageOps::Threshold(const QImage& img, const int& threshVal)
          QRgb* line = (QRgb*)returnImg.scanLine(y);
          for (int x = 0; x < img.width(); x++)
          {
+//            returnImg.setPixel(QPoint(x, y), qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0);
+
             // line[x] has an individual pixel
             line[x] = qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0;
          }
@@ -18,6 +21,109 @@ QImage ImageOps::Threshold(const QImage& img, const int& threshVal)
    }
    
    return returnImg;
+}
+
+QImage ImageOps::AdaptiveThreshold(const QImage& img, const int& area)
+{
+   QImage returnImg = img;
+
+   for (int y = 0; y < img.height(); y++)
+   {
+      QRgb* line = (QRgb*)returnImg.scanLine(y);
+      
+      for (int x = 0; x < img.width(); x++)
+      {
+         // line[x] has an individual pixel
+         line[x] = qGray(img.pixel(x, y)) > GetAreaMean(img, Pixel(x,y), area) ? QColor(Qt::white).rgb() : 0;
+      }
+   }
+   
+   return returnImg;
+}
+
+//https://www.ipol.im/pub/art/2016/158/article_lr.pdf
+int ImageOps::CalculateOtsu(const QImage& img)
+{
+   int N = img.width() * img.height();
+   
+   int threshold = 0;
+   double varMax = 0;
+   double sum = 0;
+   double sumB = 0;
+   int q1 = 0;
+   int q2 = 0;
+
+   QVector<int> histogram(QVector<int>(MAX_THRESH_VAL, 0));
+
+   
+   for (int y = 0; y < img.height(); y++)
+   {
+      for (int x = 0; x < img.width(); x++)
+      {
+         histogram[qGray(img.pixel(x, y))]++;
+      }
+   }
+   
+   for (int i = 0; i <= MAX_THRESH_VAL; i++)
+   {
+      sum += i * histogram[i];
+   }
+   
+   for (int t = 0; t <= MAX_THRESH_VAL; t++)
+   {
+      q1 += histogram[t];
+      
+      if (q1 != 0)
+      {
+         q2 = N - q1;
+         
+         if (q2 == 0)
+         {
+            break;
+         }
+         
+         sumB += (double)(t * histogram[t]);
+         int u1 = sumB / q1;
+         int u2 = (sum - sumB) / q2;
+         
+         double varianceBetween = (double)q1 * (double)q2 * (u1 - u2) * (u1 - u2);
+         
+         if (varianceBetween > varMax)
+         {
+            threshold = t;
+            varMax = varianceBetween;
+         }
+      }
+   }
+   
+   return threshold;
+}
+
+int ImageOps::GetAreaMean(const QImage& img, const Pixel& p, const int& area)
+{
+   int sum = 0;
+   int count = 0;
+   
+   for (int i = -area; i <= area; i++)
+   {
+      for (int j = -area; j <= area; j++)
+      {
+         count++;
+         sum += RealImageValue(img, Pixel(p, Pixel(i,j)));
+      }
+   }
+   
+   return sum/(4*area*area);
+}
+
+int ImageOps::RealImageValue(const QImage& img, const Pixel& p)
+{
+   if (img.valid(p.x, p.y))
+   {
+      return qGray(img.pixel(p.x, p.y));
+   }
+   
+   return 255;
 }
 
 QVector<Pixel> ImageOps::Flood(const QImage& img, const Pixel& startPixel, const QVector<Pixel>& conn)

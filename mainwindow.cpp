@@ -43,6 +43,7 @@ void MainWindow::OpenFile()
 	}
 
 	view->fitInView(p, Qt::KeepAspectRatio);
+   std::cout<< "ratio: " <<view->devicePixelRatio() <<std::endl;
 }
 
 void MainWindow::CreateActions()
@@ -190,8 +191,9 @@ void MainWindow::HandleThresholdFinished(const QImage& val)
 	p->setPixmap(QPixmap::fromImage(val));
 }
 
-void MainWindow::HandleFloodFinished(const QImage& val)
+void MainWindow::HandleFloodFinished(const QImage& val, const int& numPixels)
 {
+   statusBar()->showMessage(QString::number(numPixels));
 	if (overlay == nullptr)
 	{
 		overlay = scene->addPixmap(QPixmap::fromImage(val));
@@ -258,6 +260,28 @@ bool MainWindow::eventFilter(QObject* target, QEvent* event)
 	{
 		HandleClickEvent(event);
 	}
+   else if (target == scene && event->type() == QEvent::GraphicsSceneWheel)
+   {
+      if (QApplication::keyboardModifiers() & Qt::ControlModifier)
+      {
+         QGraphicsSceneWheelEvent* n = (QGraphicsSceneWheelEvent*)event;
+
+         view->setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+         // Scale the view / do the zoom
+         qreal factor;
+
+         if (n->delta() > 0)
+         {
+           factor = 1.1;
+         }
+         else
+         {
+           factor = 0.9;
+         }
+         view->scale(factor, factor);
+      }
+
+   }
 
 	return QMainWindow::eventFilter(target, event);
 }

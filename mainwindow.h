@@ -30,9 +30,8 @@
 #include <QThread>
 #include <QStack>
 #include <QFormLayout>
-
+#include <QWheelEvent>
 #include <QVector>
-
 
 #include <iostream>
 #include <algorithm>
@@ -56,7 +55,7 @@ private slots:
 	void HandleClickEvent(QEvent* event);
 	void HandleThresholdSliderChanged(int value);
 	void HandleThresholdFinished(const QImage& val);
-	void HandleFloodFinished(const QImage& val);
+	void HandleFloodFinished(const QImage& val, const int& numberPixels);
    void HandleProgressUpdate(const int& percentDone);
    void HandleOtsuThresholdReady(const int& t);
 	bool eventFilter(QObject* target, QEvent* event);
@@ -169,7 +168,7 @@ public:
 	{
       QVector<Pixel> s = ImageOps::Flood(img, startPixel, conn);
 
-		emit resultReady(ImageOps::ImageFromPixelSet(img, s));
+		emit resultReady(ImageOps::ImageFromPixelSet(img, s), s.count());
 	}
 
 private:
@@ -178,7 +177,7 @@ private:
 	QVector<Pixel> conn;
 
 signals:
-	void resultReady(const QImage& s);
+	void resultReady(const QImage& s, const int& numPixels);
 };
 
 class ThinThread : public QThread
@@ -210,8 +209,20 @@ public:
             break;
          }
       }
+      int numPix = 0;
+      
+      for (int y = 0; y < img.height(); y++)
+      {
+         for (int x = 0; x < img.width(); x++)
+         {
+            if (img.pixel(x, y) == QColor(Qt::red).rgb())
+            {
+               numPix++;
+            }
+         }
+      }
      
-      emit resultReady(img);
+      emit resultReady(img,numPix);
    }
 
 private:
@@ -219,7 +230,7 @@ private:
    
    
 signals:
-   void resultReady(const QImage& s);
+   void resultReady(const QImage& s, const int& numPix);
 };
 
 static bool sorty(const QVector<Pixel> &s1, const QVector<Pixel> &s2)
@@ -238,7 +249,7 @@ public:
    {
       auto b = ImageOps::LabelComponents(img);
       std::sort(b.begin(), b.end(), sorty);
-      emit resultReady(ImageOps::ImageFromPixelSet(img, b.back()));
+      emit resultReady(ImageOps::ImageFromPixelSet(img, b.back()), b.back().count());
    }
 
 private:
@@ -246,7 +257,7 @@ private:
 
    
 signals:
-   void resultReady(const QImage& s);
+   void resultReady(const QImage& s, const int&);
 };
 
 

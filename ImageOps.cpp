@@ -215,7 +215,7 @@ QVector<QVector<Pixel>> ImageOps::LabelComponents(const QImage& img)
 QImage ImageOps::ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s)
 {
    QPixmap temp(img.size());
-   temp.fill(Qt::transparent);t
+   temp.fill(Qt::transparent);
 
    QImage image = QImage(temp.toImage());
 

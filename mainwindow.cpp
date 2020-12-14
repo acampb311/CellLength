@@ -73,15 +73,23 @@ void MainWindow::CreateToolbars()
       thinThread->start();
       });
 
+   
+   QPushButton* labelButton = new QPushButton(tr("Label"));
+   QObject::connect(labelButton, &QPushButton::clicked, this, [=]() {
+      LabelThread* thinThread = new LabelThread(p->pixmap().toImage());
+      connect(thinThread, &LabelThread::resultReady, this, &MainWindow::HandleFloodFinished);
+      connect(thinThread, &LabelThread::finished, thinThread, &QObject::deleteLater);
+      thinThread->start();
+      });
 
    this->operationProgress = new QProgressBar();
    this->operationProgress->setRange(0, 100);
 
-   //   this->operationProgress->setVisible(false);
    
 	toolbar->addWidget(CreateThresholdControls());
    toolbar->addWidget(CreateConnectivityButtons());
    toolbar->addWidget(thinButton);
+   toolbar->addWidget(labelButton);
 }
 
 QGroupBox* MainWindow::CreateThresholdControls()

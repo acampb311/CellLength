@@ -1,5 +1,7 @@
 #include "ImageOps.h"
 #include <QtConcurrent/QtConcurrent>
+#include <iostream>
+#include <QFuture>
 
 QImage ImageOps::Threshold(const QImage& img, const int& threshVal)
 {
@@ -12,8 +14,6 @@ QImage ImageOps::Threshold(const QImage& img, const int& threshVal)
          QRgb* line = (QRgb*)returnImg.scanLine(y);
          for (int x = 0; x < img.width(); x++)
          {
-//            returnImg.setPixel(QPoint(x, y), qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0);
-
             // line[x] has an individual pixel
             line[x] = qGray(img.pixel(x, y)) > threshVal ? QColor(Qt::white).rgb() : 0;
          }
@@ -123,7 +123,7 @@ int ImageOps::RealImageValue(const QImage& img, const Pixel& p)
       return qGray(img.pixel(p.x, p.y));
    }
    
-   return 255;
+   return MAX_THRESH_VAL;
 }
 
 QVector<Pixel> ImageOps::Flood(const QImage& img, const Pixel& startPixel, const QVector<Pixel>& conn)
@@ -160,10 +160,62 @@ QVector<Pixel> ImageOps::Flood(const QImage& img, const Pixel& startPixel, const
    return s;
 }
 
+QVector<Pixel> ImageOps::LabelOp(const Pixel& pix)
+{
+   QVector<Pixel> retComponent;
+
+   if (multiImg.pixel(pix.x, pix.y) == QColor(Qt::white).rgb() && !multiVisited[pix.x * multiImg.width() + pix.y])
+   {
+      //flood from this point
+      retComponent = Flood(multiImg, Pixel(pix.x,pix.y), *eightConn);
+
+      //mark all of the components in the current one as visited
+      for (const auto& pix : retComponent)
+      {
+         //yeah, the mutex slowed access down, just going to check if another
+         //thread has already touched this component. This is probs logic that will
+         //bite me later.
+         if (multiVisited[pix.x * multiImg.width() + pix.y])
+         {
+            return QVector<Pixel>();
+         }
+         multiVisited[pix.x * multiImg.width() + pix.y] = true;
+      }
+   }
+
+   return retComponent;
+}
+
+QVector<QVector<Pixel>> ImageOps::LabelComponents(const QImage& img)
+{
+   //don't use global variables, kids
+   multiVisited = new bool[img.height() * img.width()]{ false };
+   multiImg = img;
+   
+   QVector<Pixel> xyCombos;
+   
+   for (int y = 0; y < img.height(); y++)
+   {
+      for (int x = 0; x < img.width(); x++)
+      {
+         xyCombos.push_back(Pixel(x,y));
+      }
+   }
+   
+   //when your code is slow, don't bother being smart, it must just be time for
+   //parallelization. Anywho, this will go through all x/y pairs and place them
+   //into their components. It will block until finished.
+   auto components = QtConcurrent::blockingMapped(xyCombos, ImageOps::LabelOp);
+   
+   delete[] multiVisited;
+
+   return components;
+}
+
 QImage ImageOps::ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s)
 {
    QPixmap temp(img.size());
-   temp.fill(Qt::transparent);
+   temp.fill(Qt::transparent);t
 
    QImage image = QImage(temp.toImage());
 

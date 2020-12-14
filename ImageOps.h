@@ -7,6 +7,7 @@
 #include <QStack>
 #include <QGraphicsSceneMouseEvent>
 #include <bitset>
+#include <QMutex>
 
 #define MAX_THRESH_VAL 255
 #define MIN_THRESH_VAL 0
@@ -31,6 +32,13 @@ public:
    int y;
 };
 
+static QVector<Pixel>* fourConnn = new QVector<Pixel>({ {0, -1}, { -1,0 }, { 0,1 }, { 1,0 } });
+static QVector<Pixel>* eightConn = new QVector<Pixel>({ {-1,-1},{0,-1}, {1,-1}, {-1,0},{1,0},{-1,1},{0,1},{1,1}});
+
+//static QMutex visitedMutex;
+static bool* multiVisited;
+static QImage multiImg;
+
 namespace ImageOps
 {
 
@@ -39,6 +47,10 @@ QImage Threshold(const QImage& img, const int& threshVal);
 QImage AdaptiveThreshold(const QImage& img, const int& area);
 
 int RealImageValue(const QImage& img, const Pixel& p);
+
+QVector<QVector<Pixel>> LabelComponents(const QImage& img);
+
+QVector<Pixel> LabelOp(const Pixel& pix);
 
 int CalculateOtsu(const QImage& img);
 

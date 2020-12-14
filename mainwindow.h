@@ -29,14 +29,13 @@
 #include <QToolBar>
 #include <QThread>
 #include <QStack>
-
 #include <QFormLayout>
 
 #include <QVector>
 
 
 #include <iostream>
-
+#include <algorithm>
 
 #include "ImageOps.h"
 
@@ -76,8 +75,6 @@ private:
 	QGroupBox* CreateConnectivityButtons();
    QGroupBox* CreateThresholdControls();
 	QVector<Pixel>* currentConn = nullptr;
-	QVector<Pixel>* fourConnn = new QVector<Pixel>({ {0, -1}, { -1,0 }, { 0,1 }, { 1,0 } });
-	QVector<Pixel>* eightConn = new QVector<Pixel>({ {-1,-1},{0,-1}, {1,-1}, {-1,0},{1,0},{-1,1},{0,1},{1,1}});
 };
 
 class ThresholdThread : public QThread
@@ -220,6 +217,33 @@ public:
 private:
    QImage img;
    
+   
+signals:
+   void resultReady(const QImage& s);
+};
+
+static bool sorty(const QVector<Pixel> &s1, const QVector<Pixel> &s2)
+{
+   return s1.count() < s2.count();
+}
+
+class LabelThread : public QThread
+{
+   Q_OBJECT
+public:
+   LabelThread(const QImage& img)
+      : img(img) {};
+
+   void run() override
+   {
+      auto b = ImageOps::LabelComponents(img);
+      std::sort(b.begin(), b.end(), sorty);
+      emit resultReady(ImageOps::ImageFromPixelSet(img, b.back()));
+   }
+
+private:
+   QImage img;
+
    
 signals:
    void resultReady(const QImage& s);

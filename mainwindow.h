@@ -32,6 +32,8 @@
 #include <QFormLayout>
 #include <QWheelEvent>
 #include <QVector>
+#include <QtConcurrent/QtConcurrent>
+#include <QFuture>
 
 #include <iostream>
 #include <algorithm>
@@ -56,7 +58,7 @@ private slots:
 	void HandleThresholdSliderChanged(int value);
 	void HandleThresholdFinished(const QImage& val);
 	void HandleFloodFinished(const QImage& val, const int& numberPixels);
-   void HandleProgressUpdate(const int& percentDone);
+   void HandleProgressUpdate(const int& percentDone, const QString& operation);
    void HandleOtsuThresholdReady(const int& t);
 	bool eventFilter(QObject* target, QEvent* event);
 
@@ -67,6 +69,7 @@ private:
 	QGraphicsView* view;
 	QImage img;
    QProgressBar* operationProgress = nullptr;
+   QLabel* statusBarLabel = nullptr;
 	Pixel lastClickedPixel = {};
 	QGraphicsPixmapItem* p = nullptr;
 	QGraphicsPixmapItem* overlay = nullptr;
@@ -117,10 +120,10 @@ public:
          for (int x = 0; x < img.width(); x++)
          {
             // line[x] has an individual pixel
-            line[x] = qGray(img.pixel(x, y)) > (ImageOps::GetAreaMean(img, Pixel(x,y), area) - c)? QColor(Qt::white).rgb() : 0;
+            line[x] = (qGray(img.pixel(x, y)) > (ImageOps::GetAreaMean(img, Pixel(x,y), area) - c))? QColor(Qt::white).rgb() : 0;
          }
          
-         emit ProgressUpdate(((double)y/img.height())*100);
+         emit ProgressUpdate(((double)y/img.height())*100, "Adapt Threshold: ");
       }
       
       emit resultReady(returnImg);
@@ -132,7 +135,7 @@ private:
    QImage img;
 
 signals:
-   void ProgressUpdate(const int&);
+   void ProgressUpdate(const int&, const QString);
    void resultReady(const QImage& s);
 };
 
@@ -140,19 +143,39 @@ class OtsuThresholdThread : public QThread
 {
    Q_OBJECT
 public:
-   OtsuThresholdThread(const QImage& img)
-      : img(img) {};
+   OtsuThresholdThread(const int& area, const int& c, const QImage& img)
+      : area(area)
+      , c(c)
+      , img(img) {};
 
    void run() override
    {
-      ThresholdReady(ImageOps::CalculateOtsu(img));
+      QImage returnImg = img;
+
+      for (int y = 0; y < img.height(); y++)
+      {
+         QRgb* line = (QRgb*)returnImg.scanLine(y);
+         
+         for (int x = 0; x < img.width(); x++)
+         {
+            auto hist = ImageOps::GetAreaHistogram(img, Pixel(x,y), area);
+
+            line[x] = qGray(img.pixel(x, y)) > (ImageOps::CalculateOtsu(img, hist, 4*area*area)-c) ? QColor(Qt::white).rgb() : 0;
+         }
+         
+         emit ProgressUpdate(((double)y/img.height())*100, "Otsu Threshold: ");
+      }
+      
+      emit resultReady(returnImg);
    }
 
 private:
    QImage img;
-
+   int area = 0;
+   int c = 0;
 signals:
-   void ThresholdReady(const int&);
+   void ProgressUpdate(const int&, const QString);
+   void resultReady(const QImage& s);
 };
 
 class FloodThread : public QThread
@@ -168,7 +191,7 @@ public:
 	{
       QVector<Pixel> s = ImageOps::Flood(img, startPixel, conn);
 
-		emit resultReady(ImageOps::ImageFromPixelSet(img, s), s.count());
+		emit resultReady(ImageOps::ImageFromPixelSet(img, s, QColor(Qt::red)), s.count());
 	}
 
 private:
@@ -209,20 +232,20 @@ public:
             break;
          }
       }
-      int numPix = 0;
-      
+
+      QVector<Pixel> s;
       for (int y = 0; y < img.height(); y++)
       {
          for (int x = 0; x < img.width(); x++)
          {
             if (img.pixel(x, y) == QColor(Qt::red).rgb())
             {
-               numPix++;
+               s.push_back(Pixel(x,y));
             }
          }
       }
-     
-      emit resultReady(img,numPix);
+
+      emit resultReady(ImageOps::ImageFromPixelSet(img, s, QColor(Qt::red)), s.count());
    }
 
 private:
@@ -247,9 +270,13 @@ public:
 
    void run() override
    {
-      auto b = ImageOps::LabelComponents(img);
+      ProgressIndicator *p = new ProgressIndicator();
+      
+      auto b = ImageOps::LabelComponents(img, p);
+      
       std::sort(b.begin(), b.end(), sorty);
-      emit resultReady(ImageOps::ImageFromPixelSet(img, b.back()), b.back().count());
+      emit resultReady(ImageOps::ImageFromPixelSet(img, b.back(), QColor(Qt::red)), b.back().count());
+      delete p;
    }
 
 private:
@@ -258,6 +285,52 @@ private:
    
 signals:
    void resultReady(const QImage& s, const int&);
+};
+
+class CleanThread : public QThread
+{
+   Q_OBJECT
+public:
+   CleanThread(const QImage& img)
+      : img(img) {};
+
+   void run() override
+   {
+      ProgressIndicator *p = new ProgressIndicator();
+      connect(p, &ProgressIndicator::ProgressUpdate, this, &CleanThread::Handle);
+
+      auto b = ImageOps::LabelComponents(img, p);
+      
+      std::sort(b.begin(), b.end(), sorty);
+      
+      QVector<Pixel>daddyObject;
+      
+      for (const auto& comp : b)
+      {
+         if (comp.count() > 200)
+         {
+            daddyObject.append(comp);
+         }
+      }
+
+      emit resultReady(ImageOps::ImageFromPixelSet(img, daddyObject, QColor(Qt::white)));
+      emit ProgressUpdate(100, "");
+
+      delete p;
+   }
+
+private:
+   QImage img;
+   
+public slots:
+   void Handle(const int& value, const QString& operationName)
+   {
+      emit ProgressUpdate(value, operationName);
+   }
+   
+signals:
+   void ProgressUpdate(const int& value, const QString& operationName);
+   void resultReady(const QImage& s);
 };
 
 

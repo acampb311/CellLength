@@ -1,7 +1,7 @@
 #include "ImageOps.h"
 #include <QtConcurrent/QtConcurrent>
-#include <iostream>
 #include <QFuture>
+
 
 QImage ImageOps::Threshold(const QImage& img, const int& threshVal)
 {
@@ -41,10 +41,64 @@ QImage ImageOps::AdaptiveThreshold(const QImage& img, const int& area)
    return returnImg;
 }
 
-//https://www.ipol.im/pub/art/2016/158/article_lr.pdf
-int ImageOps::CalculateOtsu(const QImage& img)
+QImage ImageOps::Dilate(const QImage& img)
 {
-   int N = img.width() * img.height();
+   QImage returnImg = img;
+
+   //the dilation operation sets a background pixel to foreground
+   //if there is an object pixel in its 3x3 neighborhood
+   for (int y = 0; y < img.height(); y++)
+   {
+      QRgb* line = (QRgb*)returnImg.scanLine(y);
+      
+      for (int x = 0; x < img.width(); x++)
+      {
+         //look through the surrounding 8 pixels to see if any are foreground.
+         for (const auto& pix : border)
+         {
+            if (RealImageValue(img, Pixel(Pixel(x,y),pix)) == MAX_THRESH_VAL)
+            {
+               line[x] = QColor(Qt::white).rgb();
+               break;
+            }
+         }
+      }
+   }
+   
+   return returnImg;
+}
+
+QImage ImageOps::Erode(const QImage& img)
+{
+   QImage returnImg = img;
+
+   //the dilation operation sets a foreground pixel to background
+   //if there is an background pixel in its 3x3 neighborhood
+   for (int y = 0; y < img.height(); y++)
+   {
+      QRgb* line = (QRgb*)returnImg.scanLine(y);
+      
+      for (int x = 0; x < img.width(); x++)
+      {
+         //look through the surrounding 8 pixels to see if any are background.
+         for (const auto& pix : border)
+         {
+            if (RealImageValue(img, Pixel(Pixel(x,y),pix)) != MAX_THRESH_VAL)
+            {
+               line[x] = QColor(Qt::black).rgb();
+               break;
+            }
+         }
+      }
+   }
+   
+   return returnImg;
+}
+
+//https://www.ipol.im/pub/art/2016/158/article_lr.pdf
+int ImageOps::CalculateOtsu(const QImage& img, const QVector<int>& histogram, const int& N)
+{
+//   int N = img.width() * img.height();
    
    int threshold = 0;
    double varMax = 0;
@@ -52,17 +106,6 @@ int ImageOps::CalculateOtsu(const QImage& img)
    double sumB = 0;
    int q1 = 0;
    int q2 = 0;
-
-   QVector<int> histogram(QVector<int>(MAX_THRESH_VAL, 0));
-
-   
-   for (int y = 0; y < img.height(); y++)
-   {
-      for (int x = 0; x < img.width(); x++)
-      {
-         histogram[qGray(img.pixel(x, y))]++;
-      }
-   }
    
    for (int i = 0; i <= MAX_THRESH_VAL; i++)
    {
@@ -114,6 +157,21 @@ int ImageOps::GetAreaMean(const QImage& img, const Pixel& p, const int& area)
    }
    
    return sum/(4*area*area);
+}
+
+QVector<int> ImageOps::GetAreaHistogram(const QImage& img, const Pixel& p, const int& area)
+{
+   QVector<int> histogram(QVector<int>(MAX_THRESH_VAL, 0));
+   
+   for (int i = -area; i <= area; i++)
+   {
+      for (int j = -area; j <= area; j++)
+      {
+         histogram[RealImageValue(img, Pixel(p, Pixel(i,j)))]++;
+      }
+   }
+   
+   return histogram;
 }
 
 int ImageOps::RealImageValue(const QImage& img, const Pixel& p)
@@ -186,7 +244,7 @@ QVector<Pixel> ImageOps::LabelOp(const Pixel& pix)
    return retComponent;
 }
 
-QVector<QVector<Pixel>> ImageOps::LabelComponents(const QImage& img)
+QVector<QVector<Pixel>> ImageOps::LabelComponents(const QImage& img, ProgressIndicator* progress)
 {
    //don't use global variables, kids
    multiVisited = new bool[img.height() * img.width()]{ false };
@@ -205,14 +263,20 @@ QVector<QVector<Pixel>> ImageOps::LabelComponents(const QImage& img)
    //when your code is slow, don't bother being smart, it must just be time for
    //parallelization. Anywho, this will go through all x/y pairs and place them
    //into their components. It will block until finished.
-   auto components = QtConcurrent::blockingMapped(xyCombos, ImageOps::LabelOp);
+   auto components = QtConcurrent::mapped(xyCombos, ImageOps::LabelOp);
+   
+   while (!components.isFinished())
+   {
+//      qDebug()<<(components.progressValue()/xyCombos.count())*100;
+      progress->ProgressUpdate((components.progressValue()/xyCombos.count())*100, "Labeling Components: ");
+   }
    
    delete[] multiVisited;
 
-   return components;
+   return  components.results().toVector();
 }
 
-QImage ImageOps::ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s)
+QImage ImageOps::ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s, const QColor& color)
 {
    QPixmap temp(img.size());
    temp.fill(Qt::transparent);
@@ -222,7 +286,7 @@ QImage ImageOps::ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s)
    //TODO need to figure out how to get rid of setPixel
    for (const auto& pix : s)
    {
-      image.setPixel(QPoint(pix.x, pix.y), QColor(Qt::red).rgb());
+      image.setPixel(QPoint(pix.x, pix.y), color.rgb());
    }
    
    return image;
@@ -305,7 +369,7 @@ bool ImageOps::IsSimple(const QImage& img, const Pixel& p)
    //1 0 1
    //0 1 0
    //would be represented by {1,0,0,1,0,1,0,1,0} and the final value of 298.
-   //This relys on our previously constructed simple cell lookup table.
+   //This relies on our previously constructed simple cell lookup table.
    int idx = 0;
    for (const auto& pix : neigh)
    {

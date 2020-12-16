@@ -8,9 +8,19 @@
 #include <QGraphicsSceneMouseEvent>
 #include <bitset>
 #include <QMutex>
+#include <QObject>
 
 #define MAX_THRESH_VAL 255
 #define MIN_THRESH_VAL 0
+
+class ProgressIndicator : public QObject
+{
+   Q_OBJECT
+public:
+   ProgressIndicator() {};
+signals:
+   void ProgressUpdate(const int& value, const QString& operationName);
+};
 
 static constexpr bool isSimpleTable[] =
 {
@@ -35,30 +45,37 @@ public:
 static QVector<Pixel>* fourConnn = new QVector<Pixel>({ {0, -1}, { -1,0 }, { 0,1 }, { 1,0 } });
 static QVector<Pixel>* eightConn = new QVector<Pixel>({ {-1,-1},{0,-1}, {1,-1}, {-1,0},{1,0},{-1,1},{0,1},{1,1}});
 
-//static QMutex visitedMutex;
 static bool* multiVisited;
 static QImage multiImg;
 
 namespace ImageOps
 {
 
+
+
 QImage Threshold(const QImage& img, const int& threshVal);
 
 QImage AdaptiveThreshold(const QImage& img, const int& area);
 
+QImage Dilate(const QImage& img);
+
+QImage Erode(const QImage& img);
+
 int RealImageValue(const QImage& img, const Pixel& p);
 
-QVector<QVector<Pixel>> LabelComponents(const QImage& img);
+QVector<QVector<Pixel>> LabelComponents(const QImage& img, ProgressIndicator* progress);
 
 QVector<Pixel> LabelOp(const Pixel& pix);
 
-int CalculateOtsu(const QImage& img);
+int CalculateOtsu(const QImage& img, const QVector<int>& histogram, const int& N);
 
 int GetAreaMean(const QImage& img, const Pixel& p, const int& area);
 
+QVector<int> GetAreaHistogram(const QImage& img, const Pixel& p, const int& area);
+
 QVector<Pixel> Flood(const QImage& img, const Pixel& startPixel, const QVector<Pixel>& conn);
 
-QImage ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s);
+QImage ImageFromPixelSet(const QImage& img, const QVector<Pixel>& s, const QColor& color);
 
 int ImageValue(const QImage& img, const Pixel& p);
 

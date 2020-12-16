@@ -6,6 +6,18 @@ MainWindow::MainWindow(QWidget* parent)
 	, view(new QGraphicsView())
 {
 	InitMainWindow();
+   
+   QWidget* statusBarWidget = new QWidget();
+   QHBoxLayout* statusBarLayout = new QHBoxLayout(statusBarWidget);
+   statusBarLabel = new QLabel();
+   statusBarLayout->setContentsMargins(0, 0, 0, 0);
+
+   this->operationProgress = new QProgressBar();
+   this->operationProgress->setRange(0, 100);
+   statusBarLayout->addWidget(this->statusBarLabel);
+   statusBarLayout->addWidget(this->operationProgress);
+   statusBar()->addWidget(statusBarWidget);
+   
 	CreateActions();
 	CreateMenus();
 	CreateToolbars();
@@ -16,8 +28,8 @@ MainWindow::MainWindow(QWidget* parent)
 
 	view->setScene(scene);
 	scene->installEventFilter(this);
-
-	statusBar()->showMessage(tr("Ready"));
+   
+	this->statusBarLabel->setText("Ready");
 }
 
 MainWindow::~MainWindow()
@@ -64,6 +76,26 @@ void MainWindow::CreateToolbars()
 {
 	QToolBar* toolbar = new QToolBar();
 	addToolBar(Qt::LeftToolBarArea, toolbar);
+   
+   QPushButton* cleanButton = new QPushButton(tr("Clean"));
+   QObject::connect(cleanButton, &QPushButton::clicked, this, [=]() {
+      CleanThread* thinThread = new CleanThread(p->pixmap().toImage());
+
+      connect(thinThread, &CleanThread::ProgressUpdate, this, &MainWindow::HandleProgressUpdate);
+      connect(thinThread, &CleanThread::resultReady, this, &MainWindow::HandleThresholdFinished);
+      connect(thinThread, &CleanThread::finished, thinThread, &QObject::deleteLater);
+      thinThread->start();
+      });
+   
+   QPushButton* dilateButton = new QPushButton(tr("Dilate"));
+   QObject::connect(dilateButton, &QPushButton::clicked, this, [=]() {
+      HandleThresholdFinished(ImageOps::Dilate(p->pixmap().toImage()));
+      });
+   
+   QPushButton* erodeButton = new QPushButton(tr("Erode"));
+   QObject::connect(erodeButton, &QPushButton::clicked, this, [=]() {
+      HandleThresholdFinished(ImageOps::Erode(p->pixmap().toImage()));
+      });
 
    QPushButton* thinButton = new QPushButton(tr("Thin"));
    QObject::connect(thinButton, &QPushButton::clicked, this, [=]() {
@@ -72,6 +104,7 @@ void MainWindow::CreateToolbars()
       connect(thinThread, &ThinThread::resultReady, this, &MainWindow::HandleFloodFinished);
       connect(thinThread, &ThinThread::finished, thinThread, &QObject::deleteLater);
       thinThread->start();
+      p->setPixmap(QPixmap::fromImage(img));
       });
 
    
@@ -83,12 +116,12 @@ void MainWindow::CreateToolbars()
       thinThread->start();
       });
 
-   this->operationProgress = new QProgressBar();
-   this->operationProgress->setRange(0, 100);
-
-   
 	toolbar->addWidget(CreateThresholdControls());
    toolbar->addWidget(CreateConnectivityButtons());
+   toolbar->addWidget(cleanButton);
+   toolbar->addWidget(dilateButton);
+   toolbar->addWidget(erodeButton);
+
    toolbar->addWidget(thinButton);
    toolbar->addWidget(labelButton);
 }
@@ -125,14 +158,25 @@ QGroupBox* MainWindow::CreateThresholdControls()
    QHBoxLayout* otsuLayout = new QHBoxLayout(otsuCalcWidget);
    otsuLayout->setContentsMargins(0, 0, 0, 0);
    
-   QPushButton* otsuButton = new QPushButton(tr("Run"));
-   otsuLayout->addWidget(new QLabel("Otsu Threshold:"));
-   otsuLayout->addWidget(this->otsuThresholdLabel);
+   QLineEdit* otsuAreaLineEdit = new QLineEdit();
+   otsuAreaLineEdit->setMaximumWidth(40);
+   QLineEdit* otsuCLineEdit = new QLineEdit();
+   otsuCLineEdit->setMaximumWidth(40);
+   QPushButton* otsuButton = new QPushButton(tr("Run Otsu"));
+   otsuLayout->addWidget(new QLabel("Area:"));
+   otsuLayout->addWidget(otsuAreaLineEdit);
+   otsuLayout->addWidget(new QLabel("C:"));
+   otsuLayout->addWidget(otsuCLineEdit);
    otsuLayout->addWidget(otsuButton);
+   
+//   otsuLayout->addWidget(new QLabel("Otsu Threshold:"));
+//   otsuLayout->addWidget(this->otsuThresholdLabel);
+//   otsuLayout->addWidget(otsuButton);
    QObject::connect(otsuButton, &QPushButton::clicked, this, [=]() {
-      OtsuThresholdThread* otsuThread = new OtsuThresholdThread(img);
+      OtsuThresholdThread* otsuThread = new OtsuThresholdThread(otsuAreaLineEdit->text().toInt(), otsuCLineEdit->text().toInt(), img);
 
-      connect(otsuThread, &OtsuThresholdThread::ThresholdReady, this, &MainWindow::HandleOtsuThresholdReady);
+      QObject::connect(otsuThread, &OtsuThresholdThread::ProgressUpdate, this, &MainWindow::HandleProgressUpdate);
+      connect(otsuThread, &OtsuThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
       connect(otsuThread, &OtsuThresholdThread::finished, otsuThread, &QObject::deleteLater);
       otsuThread->start();
       });
@@ -145,7 +189,7 @@ QGroupBox* MainWindow::CreateThresholdControls()
    areaLineEdit->setMaximumWidth(40);
    QLineEdit* cLineEdit = new QLineEdit();
    cLineEdit->setMaximumWidth(40);
-   QPushButton* adaptButton = new QPushButton(tr("Run"));
+   QPushButton* adaptButton = new QPushButton(tr("Run Mean"));
    adaptThreshLayout->addWidget(new QLabel("Area:"));
    adaptThreshLayout->addWidget(areaLineEdit);
    adaptThreshLayout->addWidget(new QLabel("C:"));
@@ -154,7 +198,7 @@ QGroupBox* MainWindow::CreateThresholdControls()
 
    QObject::connect(adaptButton, &QPushButton::clicked, this, [=]() {
       AdaptThresholdThread* workerThread = new AdaptThresholdThread(areaLineEdit->text().toInt(), cLineEdit->text().toInt(), img);
-
+      this->statusBarLabel->setText("Calculating Adaptive Threshold:");
       QObject::connect(workerThread, &AdaptThresholdThread::resultReady, this, &MainWindow::HandleThresholdFinished);
       QObject::connect(workerThread, &AdaptThresholdThread::ProgressUpdate, this, &MainWindow::HandleProgressUpdate);
       QObject::connect(workerThread, &AdaptThresholdThread::finished, workerThread, &QObject::deleteLater);
@@ -165,7 +209,6 @@ QGroupBox* MainWindow::CreateThresholdControls()
    thresholdControls->addWidget(manualSlider);
    thresholdControls->addWidget(otsuCalcWidget);
    thresholdControls->addWidget(adaptThreshWidget);
-   thresholdControls->addWidget(this->operationProgress);
    this->operationProgress->setVisible(false);
 
    
@@ -193,7 +236,7 @@ void MainWindow::HandleThresholdFinished(const QImage& val)
 
 void MainWindow::HandleFloodFinished(const QImage& val, const int& numPixels)
 {
-   statusBar()->showMessage(QString::number(numPixels));
+   this->statusBarLabel->setText(QString::number(numPixels/3.06) + " mm");
 	if (overlay == nullptr)
 	{
 		overlay = scene->addPixmap(QPixmap::fromImage(val));
@@ -204,13 +247,15 @@ void MainWindow::HandleFloodFinished(const QImage& val, const int& numPixels)
 	}
 }
 
-void MainWindow::HandleProgressUpdate(const int& percentDone)
+void MainWindow::HandleProgressUpdate(const int& percentDone, const QString& operation)
 {
    this->operationProgress->setVisible(true);
    this->operationProgress->setValue(percentDone);
-
-   if (percentDone == 99)
+   this->statusBarLabel->setText(operation);
+   
+   if (percentDone > 98)
    {
+      this->statusBarLabel->setText("Ready");
       this->operationProgress->setVisible(false);
    }
 
@@ -251,7 +296,7 @@ void MainWindow::HandleClickEvent(QEvent* event)
 		stat = "Outside boundary";
 	}
 
-	statusBar()->showMessage(stat);
+   this->statusBarLabel->setText(stat);
 }
 
 bool MainWindow::eventFilter(QObject* target, QEvent* event)
@@ -278,6 +323,7 @@ bool MainWindow::eventFilter(QObject* target, QEvent* event)
          {
            factor = 0.9;
          }
+         
          view->scale(factor, factor);
       }
 
